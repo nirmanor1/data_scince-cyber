@@ -1,0 +1,104 @@
+{
+  "profile": "small",
+  "config": {
+    "epochs": 5,
+    "subset_fraction": 0.4,
+    "embedding_dim": 3072
+  },
+  "class_balance": {
+    "normal": 14400,
+    "anomaly": 10026
+  },
+  "best_supervised_holdout": "logistic_regression",
+  "best_model_overall_by_f1": "logistic_regression",
+  "metrics_by_model": {
+    "logistic_regression": {
+      "accuracy": 0.9292,
+      "precision": 0.9172,
+      "recall": 0.9096,
+      "f1": 0.9134,
+      "fbeta": 0.9111,
+      "mcc": 0.8535,
+      "roc_auc": 0.9835,
+      "fpr_at_90": 0.0507,
+      "fpr_at_99": 0.2148
+    },
+    "random_forest": {
+      "accuracy": 0.8645,
+      "precision": 0.8298,
+      "recall": 0.8428,
+      "f1": 0.8362,
+      "fbeta": 0.8401,
+      "mcc": 0.7207,
+      "roc_auc": 0.9497,
+      "fpr_at_90": 0.1741,
+      "fpr_at_99": 0.3519
+    },
+    "linear_svc": {
+      "accuracy": 0.9262,
+      "precision": 0.9119,
+      "recall": 0.9079,
+      "f1": 0.9099,
+      "fbeta": 0.9087,
+      "mcc": 0.8474,
+      "roc_auc": 0.9795,
+      "fpr_at_90": 0.0565,
+      "fpr_at_99": 0.2815
+    },
+    "gradient_boosting": {
+      "accuracy": 0.8833,
+      "precision": 0.8621,
+      "recall": 0.8521,
+      "f1": 0.857,
+      "fbeta": 0.854,
+      "mcc": 0.7585,
+      "roc_auc": 0.9625,
+      "fpr_at_90": 0.128,
+      "fpr_at_99": 0.2958
+    },
+    "knn": {
+      "accuracy": 0.8474,
+      "precision": 0.8729,
+      "recall": 0.7354,
+      "f1": 0.7983,
+      "fbeta": 0.7593,
+      "mcc": 0.6835,
+      "roc_auc": 0.9444,
+      "fpr_at_90": 0.194,
+      "fpr_at_99": 0.344
+    },
+    "isolation_forest": {
+      "accuracy": 0.6452,
+      "precision": 0.6213,
+      "recall": 0.3474,
+      "f1": 0.4456,
+      "fbeta": 0.381,
+      "mcc": 0.2339,
+      "roc_auc": 0.7517,
+      "fpr_at_90": 0.4671,
+      "fpr_at_99": 0.7681
+    },
+    "local_outlier_factor": {
+      "accuracy": 0.6722,
+      "precision": 1.0,
+      "recall": 0.2015,
+      "f1": 0.3354,
+      "fbeta": 0.2398,
+      "mcc": 0.3598,
+      "roc_auc": 0.8367,
+      "fpr_at_90": 0.6477,
+      "fpr_at_99": 0.9528
+    },
+    "mlp_head (fine-tune)": {
+      "accuracy": 0.9136,
+      "precision": 0.8981,
+      "recall": 0.8906,
+      "f1": 0.8943,
+      "fbeta": 0.8921,
+      "mcc": 0.8213,
+      "roc_auc": 0.9805,
+      "fpr_at_90": 0.0766,
+      "fpr_at_99": 0.1988
+    }
+  }
+}

@@ -1,0 +1,119 @@
+Metadata-Version: 2.4
+Name: http2vec
+Version: 0.1.0
+Summary: Reproduction of HTTP2vec: RoBERTa embeddings of HTTP requests for anomaly detection.
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+Requires-Dist: torch>=2.0
+Requires-Dist: transformers>=4.30
+Requires-Dist: tokenizers>=0.13
+Requires-Dist: accelerate>=0.21
+Requires-Dist: safetensors>=0.3
+Requires-Dist: scikit-learn>=1.2
+Requires-Dist: numpy>=1.23
+Requires-Dist: pandas>=1.5
+Requires-Dist: matplotlib>=3.6
+Requires-Dist: seaborn>=0.12
+Requires-Dist: nbformat>=5.7
+Requires-Dist: tqdm>=4.64
+
+# HTTP2vec - Reproduction
+
+Reproduction and critical study of:
+
+> **HTTP2vec: Embedding of HTTP Requests for Detection of Anomalous Traffic**
+> Gniewkowski, Maciejewski, Surmacz, Walentynowicz (2021). arXiv:2108.01763
+
+The method embeds raw HTTP requests with a RoBERTa language model (trained only on
+legitimate traffic) and classifies the resulting vectors as normal or anomalous.
+
+## What this repository contains
+
+- A small, SOLID Python package (`src/http2vec`) implementing the full pipeline:
+  byte-level BPE tokenizer -> RoBERTa masked-language-model -> request embeddings
+  (mean of the last hidden layers, averaged over request lines) -> classifiers.
+- Both the paper's **supervised** classifiers (Logistic Regression, Random Forest,
+  linear SVC) and an added **unsupervised** anomaly detector (Isolation Forest)
+  that outputs, per request, an *anomaly score* and an *assigned class*.
+- A generated Jupyter notebook (`notebooks/http2vec_analysis.ipynb`) that walks
+  through data loading, EDA, feature engineering, model training and evaluation.
+
+## Project layout
+
+```
+src/http2vec/
+  config.py            # experiment configuration + demo/paper profiles
+  interfaces.py        # abstract contracts shared across the package
+  utils.py             # seeding, device resolution, logging
+  data/                # parsing, loading, descriptive features
+  tokenization/        # byte-level BPE tokenizer
+  models/              # RoBERTa MLM training + request embedder
+  classification/      # supervised classifiers + Isolation Forest detector
+  evaluation/          # metrics
+  visualization/       # plots (t-SNE, ROC, confusion matrix, ...)
+  pipeline.py          # end-to-end orchestrator
+scripts/
+  download_data.py     # CSIC2010 download helper
+  build_notebook.py    # builds notebooks/http2vec_analysis.ipynb
+notebooks/             # generated notebook
+data/                  # see data/README.md (raw files are not committed)
+```
+
+## Setup
+
+```bash
+python -m venv .venv && source .venv/bin/activate     # optional
+pip install -e .            # or: pip install -r requirements.txt
+```
+
+GPU is optional; the code auto-detects CUDA, then Apple MPS, then falls back to CPU.
+
+## Dataset
+
+See [`data/README.md`](data/README.md). Place the three CSIC2010 text files in
+`data/raw/` (or use `python scripts/download_data.py`).
+
+## Usage
+
+Configuration profiles (in `src/http2vec/config.py`):
+
+- `ExperimentConfig.demo()`  - small model on a seeded 10% subset, 2 epochs (default; runs in minutes).
+- `ExperimentConfig.paper()` - the hyper-parameters reported in the paper (GPU + hours).
+
+Programmatic end-to-end run:
+
+```python
+from http2vec.config import ExperimentConfig
+from http2vec.pipeline import Http2VecPipeline
+
+config = ExperimentConfig.demo()       # auto-detects CPU/GPU
+pipeline = Http2VecPipeline(config)
+results = pipeline.run()
+print(results.summary())
+```
+
+`results` exposes, per request, both a continuous anomaly score and an assigned
+class for the supervised classifiers and for the Isolation Forest detector.
+
+### Notebook
+
+Build (or rebuild) the analysis notebook after changing the package, then open it:
+
+```bash
+python scripts/build_notebook.py        # writes notebooks/http2vec_analysis.ipynb
+```
+
+The notebook reads the CSIC2010 files from `data/raw/`, so download the dataset
+first (see the Dataset section). It defaults to the `demo` profile (seeded 10%
+subset, 2 epochs); switch the `PROFILE` cell to `"paper"` for the full setup.
+
+To execute it headlessly and save the outputs:
+
+```bash
+jupyter nbconvert --to notebook --execute --inplace notebooks/http2vec_analysis.ipynb
+```
+
+## Notes
+
+- This is a local project (no git is required to use it).
+- Attack payloads are always treated as opaque text and never executed.

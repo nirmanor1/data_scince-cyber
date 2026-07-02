@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "http2vec"
+version = "0.1.0"
+description = "Reproduction of HTTP2vec: RoBERTa embeddings of HTTP requests for anomaly detection."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "torch>=2.0",
+    "transformers>=4.30",
+    "tokenizers>=0.13",
+    "accelerate>=0.21",
+    "safetensors>=0.3",
+    "scikit-learn>=1.2",
+    "numpy>=1.23",
+    "pandas>=1.5",
+    "matplotlib>=3.6",
+    "seaborn>=0.12",
+    "nbformat>=5.7",
+    "tqdm>=4.64",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

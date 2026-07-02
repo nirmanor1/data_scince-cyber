@@ -1,0 +1,25 @@
+# HTTP2vec reproduction - runtime dependencies.
+# Version floors are conservative; pin exact versions after a successful install
+# (e.g. `pip freeze`) if you need byte-for-byte reproducibility.
+
+# Representation model (tokenizer + RoBERTa MLM)
+torch>=2.0
+transformers>=4.30
+tokenizers>=0.13
+accelerate>=0.21
+safetensors>=0.3
+
+# Classic ML + data handling
+scikit-learn>=1.2
+numpy>=1.23
+pandas>=1.5
+
+# Visualization
+matplotlib>=3.6
+seaborn>=0.12
+
+# Notebook generation
+nbformat>=5.7
+
+# Utilities
+tqdm>=4.64
