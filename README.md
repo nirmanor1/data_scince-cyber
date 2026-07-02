@@ -5,92 +5,55 @@ Reproduction and critical study of:
 > **HTTP2vec: Embedding of HTTP Requests for Detection of Anomalous Traffic**
 > Gniewkowski, Maciejewski, Surmacz, Walentynowicz (2021). arXiv:2108.01763
 
-The method embeds raw HTTP requests with a RoBERTa language model (trained only on
-legitimate traffic) and classifies the resulting vectors as normal or anomalous.
+The method embeds raw HTTP requests with a RoBERTa language model trained only
+on legitimate traffic, then classifies the embeddings as normal or anomalous.
+Dataset: **CSIC 2010 HTTP**.
 
-## What this repository contains
+## Contents
 
-- A small, SOLID Python package (`src/http2vec`) implementing the full pipeline:
-  byte-level BPE tokenizer -> RoBERTa masked-language-model -> request embeddings
-  (mean of the last hidden layers, averaged over request lines) -> classifiers.
-- Both the paper's **supervised** classifiers (Logistic Regression, Random Forest,
-  linear SVC) and an added **unsupervised** anomaly detector (Isolation Forest)
-  that outputs, per request, an *anomaly score* and an *assigned class*.
-- A generated Jupyter notebook (`notebooks/http2vec_analysis.ipynb`) that walks
-  through data loading, EDA, feature engineering, model training and evaluation.
-
-## Project layout
-
-```
-src/http2vec/
-  config.py            # experiment configuration + small/paper profiles
-  interfaces.py        # abstract contracts shared across the package
-  utils.py             # seeding, device resolution, logging
-  data/                # parsing, loading, descriptive features
-  tokenization/        # byte-level BPE tokenizer
-  models/              # RoBERTa MLM training + request embedder
-  classification/      # supervised classifiers + Isolation Forest detector
-  evaluation/          # metrics
-  visualization/       # plots (t-SNE, ROC, confusion matrix, ...)
-  pipeline.py          # end-to-end orchestrator
-scripts/
-  download_data.py     # CSIC2010 download helper
-  build_notebook.py    # builds notebooks/http2vec_analysis.ipynb
-notebooks/             # generated notebook
-data/                  # see data/README.md (raw files are not committed)
+```text
+README.md                  this file
+http2vec_analysis.ipynb    analysis notebook (data -> EDA -> embeddings -> models)
+Report.pdf                 final report
+src/http2vec/              pipeline package (tokenizer, RoBERTa MLM, embedder, classifiers)
+scripts/download_data.py   CSIC 2010 download helper
+data/                      see data/README.md (raw files not committed)
+artifacts/                 trained tokenizer + RoBERTa MLM checkpoint
 ```
 
 ## Setup
 
 ```bash
-python -m venv .venv && source .venv/bin/activate     # optional
-pip install -e .            # or: pip install -r requirements.txt
+pip install torch transformers tokenizers accelerate safetensors \
+            scikit-learn numpy pandas matplotlib seaborn nbformat tqdm
 ```
 
-GPU is optional; the code auto-detects CUDA, then Apple MPS, then falls back to CPU.
+The notebook adds `src/` to the path automatically. GPU (CUDA) is recommended;
+the code otherwise falls back to Apple MPS or CPU.
 
-## Dataset
+## Data
 
-See [`data/README.md`](data/README.md). Place the three CSIC2010 text files in
-`data/raw/` (or use `python scripts/download_data.py`).
+Not committed. Place the three CSIC 2010 text files in `data/raw/`:
 
-## Usage
-
-Configuration profiles (in `src/http2vec/config.py`):
-
-- `ExperimentConfig.small()` - full paper-size model on a seeded 60% subset, 5 epochs (the default).
-- `ExperimentConfig.paper()` - the hyper-parameters reported in the paper (full data, 10 epochs; GPU + hours).
-
-Programmatic end-to-end run:
-
-```python
-from http2vec.config import ExperimentConfig
-from http2vec.pipeline import Http2VecPipeline
-
-config = ExperimentConfig.small()      # auto-detects CPU/GPU
-pipeline = Http2VecPipeline(config)
-results = pipeline.run()
-print(results.summary())
+```text
+data/raw/normalTrafficTraining.txt
+data/raw/normalTrafficTest.txt
+data/raw/anomalousTrafficTest.txt
 ```
 
-`results` exposes, per request, both a continuous anomaly score and an assigned
-class for the supervised classifiers and for the Isolation Forest detector.
+Get them from the [official CSIC source](https://www.tic.itefi.csic.es/dataset/)
+or run `python scripts/download_data.py --dest data/raw`. See
+[`data/README.md`](data/README.md) for details.
 
-### Notebook
-
-Build (or rebuild) the analysis notebook after changing the package, then open it:
+## Run
 
 ```bash
-python scripts/build_notebook.py        # writes notebooks/http2vec_analysis.ipynb
+jupyter lab http2vec_analysis.ipynb
 ```
 
-The notebook reads the CSIC2010 files from `data/raw/`, so download the dataset
-first (see the Dataset section). It defaults to the `small` profile (full-size
-model, seeded 40% subset, 5 epochs); switch the `PROFILE` cell to `"paper"` for
-the full run.
+The notebook defaults to the `small` profile (full paper-size RoBERTa, seeded
+40% subset, 5 epochs); switch the `PROFILE` cell to `"paper"` for the full run.
 
-To execute it headlessly and save the outputs:
+## Report
 
-```bash
-jupyter nbconvert --to notebook --execute --inplace notebooks/http2vec_analysis.ipynb
-```
+Final report: `Report.pdf`.
