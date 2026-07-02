@@ -86,7 +86,7 @@ python scripts/build_notebook.py        # writes notebooks/http2vec_analysis.ipy
 
 The notebook reads the CSIC2010 files from `data/raw/`, so download the dataset
 first (see the Dataset section). It defaults to the `small` profile (full-size
-model, seeded 60% subset, 5 epochs); switch the `PROFILE` cell to `"paper"` for
+model, seeded 40% subset, 5 epochs); switch the `PROFILE` cell to `"paper"` for
 the full run.
 
 To execute it headlessly and save the outputs:
@@ -94,17 +94,3 @@ To execute it headlessly and save the outputs:
 ```bash
 jupyter nbconvert --to notebook --execute --inplace notebooks/http2vec_analysis.ipynb
 ```
-
-Running the notebook also writes report-ready artifacts under `reports/`:
-
-- `reports/figures/` - every figure as a PNG (MLM training curve, EDA plots,
-  t-SNE, PCA variance, the model-comparison bar chart, the ROC overlay, confusion
-  matrices, ...).
-- `reports/model_comparison.csv` - the unified per-model metric table (all
-  classifiers, the two anomaly detectors and the MLP head on one shared holdout).
-- `reports/results_summary.json` - the run's headline numbers for the written report.
-
-## Notes
-
-- This is a local project (no git is required to use it).
-- Attack payloads are always treated as opaque text and never executed.
