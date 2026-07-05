@@ -83,6 +83,7 @@ class PipelineResult:
     anomaly_detectors: dict[str, ClassificationReport]
     mlp_head: ClassificationReport
     mlp_history: list[dict]
+    holdout_test_indices: np.ndarray | None = None
 
     def summary(self) -> str:
         """Human-readable one-screen summary of the headline metrics."""
@@ -157,6 +158,39 @@ def comparison_frame(
     if "model" in frame.columns:
         frame = frame.set_index("model")
     return frame
+
+
+def error_examples(
+    report: "ClassificationReport",
+    test_indices: Sequence[int],
+    requests: Sequence,
+    *,
+    k: int = 5,
+) -> dict:
+    """Map a holdout report's false positives / negatives back to request lines.
+
+    ``report`` must have been scored on the rows given by ``test_indices`` (the
+    shared holdout), so row ``j`` of the report corresponds to
+    ``requests[test_indices[j]]``. Returns up to ``k`` example request lines for
+    each error type plus the total counts. Request text is returned verbatim for
+    inspection and is never executed or rendered.
+    """
+    y_true = np.asarray(report.y_true)
+    y_pred = np.asarray(report.y_pred)
+    indices = np.asarray(test_indices)
+    fp_positions = np.where((y_pred == 1) & (y_true == 0))[0]
+    fn_positions = np.where((y_pred == 0) & (y_true == 1))[0]
+
+    def _lines(positions: np.ndarray) -> list[str]:
+        return [requests[int(indices[p])].request_line for p in positions[:k]]
+
+    return {
+        "model": report.name,
+        "n_false_positives": int(fp_positions.size),
+        "n_false_negatives": int(fn_positions.size),
+        "false_positives": _lines(fp_positions),
+        "false_negatives": _lines(fn_positions),
+    }
 
 
 class Http2VecPipeline:
@@ -279,6 +313,41 @@ class Http2VecPipeline:
             detector, embeddings.inference_x, embeddings.inference_y
         )
 
+    def _shared_holdout_indices(self, y) -> tuple[np.ndarray, np.ndarray]:
+        """Seeded stratified train/test *row indices* for the inference set.
+
+        These indices are the single source of the shared holdout: every model
+        scored on a holdout (the embedding classifiers, the non-embedding
+        baselines and the MLP head) and the error-analysis mapping all consume
+        them, so all models are compared on identical test rows and each
+        prediction can be traced back to its original request by position.
+        """
+        y = np.asarray(y)
+        indices = np.arange(len(y))
+        _, counts = np.unique(y, return_counts=True)
+        if counts.size < 2 or counts.min() < 2:
+            logger.warning(
+                "Shared holdout fell back to using all rows for both train and "
+                "test (input too small to stratify with both classes present); "
+                "this only happens on toy inputs, never on real CSIC data."
+            )
+            return indices, indices
+        from sklearn.model_selection import train_test_split
+
+        train_idx, test_idx = train_test_split(
+            indices,
+            test_size=self.config.classifier.test_size,
+            random_state=self.config.seed,
+            stratify=y,
+        )
+        return train_idx, test_idx
+
+    def shared_holdout_indices(
+        self, embeddings: EmbeddingSet
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Public accessor for the shared holdout ``(train, test)`` row indices."""
+        return self._shared_holdout_indices(embeddings.inference_y)
+
     def _shared_holdout(self, embeddings: EmbeddingSet):
         """One seeded stratified train/test split of the inference embeddings.
 
@@ -286,12 +355,9 @@ class Http2VecPipeline:
         :meth:`evaluate_supervised_holdouts`, :meth:`evaluate_anomaly_detectors`
         and the MLP head is compared on exactly the *same* held-out test set.
         """
-        return _safe_split(
-            embeddings.inference_x,
-            embeddings.inference_y,
-            self.config.classifier.test_size,
-            self.config.seed,
-        )
+        train_idx, test_idx = self._shared_holdout_indices(embeddings.inference_y)
+        x, y = embeddings.inference_x, embeddings.inference_y
+        return x[train_idx], y[train_idx], x[test_idx], y[test_idx]
 
     def evaluate_supervised_holdouts(
         self, embeddings: EmbeddingSet
@@ -349,6 +415,82 @@ class Http2VecPipeline:
         report = self._score_report(head, x_test, y_test)
         return report, head.history
 
+    def evaluate_descriptive_baseline(
+        self, bundle: DatasetBundle, embeddings: EmbeddingSet
+    ) -> dict[str, ClassificationReport]:
+        """Handcrafted-feature baseline: classic models on the descriptive features.
+
+        Fits the handcrafted classifiers on the human-readable descriptive
+        features (report Section 3) and scores them on the shared holdout, so the
+        result is directly comparable with the embedding models. This measures how
+        much the RoBERTa embedding adds over cheap, hand-crafted features.
+        """
+        from .classification.baselines import build_descriptive_baselines
+
+        frame = build_feature_frame(bundle.inference)
+        x = frame.drop(columns=["label"])
+        y = np.asarray(embeddings.inference_y)
+        train_idx, test_idx = self._shared_holdout_indices(y)
+        reports: dict[str, ClassificationReport] = {}
+        for name, factory in build_descriptive_baselines(self.config.classifier).items():
+            model = factory()
+            model.fit(x.iloc[train_idx], y[train_idx])
+            reports[name] = self._score_report(model, x.iloc[test_idx], y[test_idx])
+        return reports
+
+    def evaluate_lexical_baseline(
+        self, bundle: DatasetBundle, embeddings: EmbeddingSet
+    ) -> dict[str, ClassificationReport]:
+        """Lexical baseline: char n-gram TF-IDF + linear models on raw request text.
+
+        A classic bag-of-character-n-grams representation (the simple alternative
+        the paper's introduction contrasts itself with), scored on the same shared
+        holdout as every other model.
+        """
+        from .classification.baselines import build_lexical_baselines
+
+        texts = bundle.inference.texts()
+        y = np.asarray(embeddings.inference_y)
+        train_idx, test_idx = self._shared_holdout_indices(y)
+        texts_train = [texts[i] for i in train_idx]
+        texts_test = [texts[i] for i in test_idx]
+        reports: dict[str, ClassificationReport] = {}
+        for name, factory in build_lexical_baselines(self.config.classifier).items():
+            model = factory()
+            model.fit(texts_train, y[train_idx])
+            reports[name] = self._score_report(model, texts_test, y[test_idx])
+        return reports
+
+    def evaluate_dedup_best(
+        self,
+        bundle: DatasetBundle,
+        embeddings: EmbeddingSet,
+        *,
+        model_name: str = "logistic_regression",
+        keys: Sequence | None = None,
+    ) -> ClassificationReport:
+        """Refit one embedding classifier on a de-duplicated split.
+
+        CSIC 2010 is heavily templated; comparing this report against the same
+        model's full-data holdout report shows how much duplicate requests inflate
+        the headline metrics. ``keys`` is the per-request sequence de-duplicated on
+        (keep-first): pass e.g. the request first lines to remove URL-template
+        repetition. Defaults to the full request text (exact-duplicate removal).
+        """
+        from .data.duplicates import unique_first_indices
+
+        dedup_keys = keys if keys is not None else bundle.inference.texts()
+        keep = unique_first_indices(dedup_keys)
+        x = np.asarray(embeddings.inference_x)[keep]
+        y = np.asarray(embeddings.inference_y)[keep]
+        x_train, y_train, x_test, y_test = _safe_split(
+            x, y, self.config.classifier.test_size, self.config.seed
+        )
+        factory = build_classifiers(self.config.classifier)[model_name]
+        model = factory()
+        model.fit(x_train, y_train)
+        return self._score_report(model, x_test, y_test)
+
     def run(self) -> PipelineResult:
         """Execute every stage and return the assembled result."""
         configure_logging()
@@ -366,6 +508,7 @@ class Http2VecPipeline:
         anomaly = self.evaluate_anomaly(embeddings)
         anomaly_detectors = self.evaluate_anomaly_detectors(embeddings)
         mlp_head, mlp_history = self.evaluate_mlp_head(embeddings)
+        _, holdout_test_indices = self.shared_holdout_indices(embeddings)
 
         return PipelineResult(
             config=self.config,
@@ -379,6 +522,7 @@ class Http2VecPipeline:
             anomaly_detectors=anomaly_detectors,
             mlp_head=mlp_head,
             mlp_history=mlp_history,
+            holdout_test_indices=holdout_test_indices,
         )
 
     # -- helpers -----------------------------------------------------------
@@ -389,12 +533,7 @@ class Http2VecPipeline:
         factory: Callable[[], ScoringModel],
         embeddings: EmbeddingSet,
     ) -> ClassificationReport:
-        x_train, y_train, x_test, y_test = _safe_split(
-            embeddings.inference_x,
-            embeddings.inference_y,
-            self.config.classifier.test_size,
-            self.config.seed,
-        )
+        x_train, y_train, x_test, y_test = self._shared_holdout(embeddings)
         model = factory()
         model.fit(x_train, y_train)
         report = self._score_report(model, x_test, y_test)

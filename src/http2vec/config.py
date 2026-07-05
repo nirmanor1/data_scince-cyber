@@ -2,8 +2,9 @@
 
 Profiles
 --------
-- :meth:`ExperimentConfig.small` - the full paper-size model on a seeded 60% subset,
-  5 epochs; a lighter stand-in for the full run (the default).
+- :meth:`ExperimentConfig.small` - the full paper-size model on a seeded 40% subset,
+  5 epochs; a lighter stand-in for the full run (the default, and the setting the
+  accompanying report and notebook use).
 - :meth:`ExperimentConfig.paper`  - the hyper-parameters reported in the paper
   (full data, 10 epochs; heavy, intended for a real GPU run).
 """
@@ -206,9 +207,10 @@ class ExperimentConfig:
         device: str = "auto",
         seed: int = 42,
         num_train_epochs: int = 10,
+        subset_fraction: float | None = None,
     ) -> "ExperimentConfig":
         return cls(
-            data=DataConfig(raw_dir=Path(raw_dir)),
+            data=DataConfig(raw_dir=Path(raw_dir), subset_fraction=subset_fraction),
             tokenizer=TokenizerConfig(vocab_size=30000, max_length=512),
             model=ModelConfig(
                 hidden_size=768,
@@ -233,14 +235,16 @@ class ExperimentConfig:
         device: str = "auto",
         seed: int = 42,
         num_train_epochs: int = 5,
+        subset_fraction: float | None = 0.4,
     ) -> "ExperimentConfig":
-        """Full paper-size model on a seeded 60% subset, fewer epochs.
+        """Full paper-size model on a seeded 40% subset, fewer epochs.
 
-        A lighter stand-in for :meth:`paper`: same architecture, ~60% of the data
-        and 5 epochs by default.
+        A lighter stand-in for :meth:`paper`: same architecture, a seeded
+        ``subset_fraction`` (40% by default) of the data and 5 epochs. This is the
+        configuration the accompanying report and notebook are run at.
         """
         return cls(
-            data=DataConfig(raw_dir=Path(raw_dir), subset_fraction=0.6),
+            data=DataConfig(raw_dir=Path(raw_dir), subset_fraction=subset_fraction),
             tokenizer=TokenizerConfig(vocab_size=30000, max_length=512),
             model=ModelConfig(
                 hidden_size=768,
